@@ -13,6 +13,7 @@
 #include "wled.h"
 #include "FX.h"
 #include "fcn_declare.h"
+#include "rotmap.h"
 
 #if !(defined(WLED_DISABLE_PARTICLESYSTEM2D) && defined(WLED_DISABLE_PARTICLESYSTEM1D))
   #include "FXparticleSystem.h"
@@ -493,6 +494,531 @@ uint16_t mode_rainbow_cycle(void) {
 }
 static const char _data_FX_MODE_RAINBOW_CYCLE[] PROGMEM = "Rainbow@!,Size;;!";
 
+inline uint32_t bg(void) {
+  return SEGMENT.getCurrentColor(1);
+}
+
+inline uint32_t fg(void) {
+  return SEGMENT.getCurrentColor(0);
+}
+
+struct DadBall {
+  float x;
+  float y;
+  float xv;
+  float yv;
+};
+
+float randF(float min, float max) {
+  return ((float)random16()) * ((max-min) / 65535) + min; 
+}
+
+uint16_t mode_dadbounce(void) {
+  if (!SEGENV.allocateData(sizeof(DadBall))) return mode_static(); //allocation failed
+  DadBall* ball = reinterpret_cast<DadBall*>(SEGENV.data);
+  // Initialize on first call.
+  if (SEGENV.call == 0) {
+    ball->x = randF(1.0, SEGMENT.virtualWidth());
+    ball->y = randF(1.0, SEGMENT.virtualHeight());
+    ball->xv = randF(1.0, 2.0); 
+    ball->yv =  randF(1.0, 2.0);
+  }
+
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 12;
+  if (SEGENV.step != counter) {
+    SEGENV.step = counter;
+    // Move the ball.
+    ball->x += ball->xv;
+    ball->y += ball->yv;
+  }
+
+  // Detect bounces.
+  if (ball->x < 0) {
+    ball->xv = -ball->xv;
+    ball->x = -ball->x;
+  }
+  if (ball->y < 0) {
+    ball->yv = -ball->yv;
+    ball->y = -ball->y;
+  }
+  
+  if (ball->x >= SEGMENT.virtualWidth()) {
+    ball->xv = -ball->xv;
+    ball->x = (SEGMENT.virtualWidth() << 1) - ball->x - 1;
+  }
+  if (ball->y >= SEGMENT.virtualHeight()) {
+    ball->yv = -ball->yv;
+    ball->y = (SEGMENT.virtualHeight() << 1) - ball->y - 1;
+  }
+  strip.fill(bg());
+  strip.setPixelColorXY((int)ball->x, (int)ball->y, fg());
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_DAD_BOUNCE[] PROGMEM = "Dad Bounce@!;!,!;;2";
+
+// Calculates the angle of the line from (cx-0.5, cy-0.5) to (x, y) in degrees.
+uint16_t angle_to(int x, int y, int cx, int cy) {
+  int ix, iy, adder;
+  if (x >= cx && y < cy) {
+      ix = x - cx;
+      iy = cy - y - 1;
+      adder = 0;
+  } else if (x < cx && y < cy) {
+      ix = cy - y - 1;
+      iy = cx - x - 1;
+      adder = 90;
+  } else if (x < cx && y >= cy) {
+      ix = cx - x - 1;
+      iy = y - cy;
+      adder = 180;
+  } else {
+      ix = y - cy;
+      iy = x - cx;
+      adder = 270;
+  }
+  if (ix > 19) { 
+    ix = 19;
+  }
+  if (iy > 19) {
+    iy = 19;
+  }
+  iy = 19 - iy;
+  return (uint16_t)rotmap2[ix + 20 * iy] + adder;
+}
+
+uint16_t mode_dadswirl(void) {
+  // This effect is hard coded for 20x20.
+  if (SEGMENT.virtualHeight() < 20 || SEGMENT.virtualWidth() < 20) return mode_static();
+  uint32_t angle = (strip.now * SEGMENT.speed) >> 10;
+  for (int x=0; x<20; x++) {
+    for (int y=0; y<20; y++) {
+      uint16_t a = (angle_to(x, y, 10, 10) + angle) % 360;
+      // map from 0-359 to 0-255
+      a = a * 256 / 360;
+      uint32_t c = SEGMENT.color_from_palette(a, false, true, 3);
+      strip.setPixelColorXY(x, y, c);
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_DAD_SWIRL[] PROGMEM = "Dad Swirl@!;;!;2";
+
+struct SwirlLoc {
+  float x;
+  float y;
+  float xv;
+  float yv;
+};
+
+uint16_t mode_wanderswirl(void) {
+  if (!SEGENV.allocateData(sizeof(SwirlLoc))) return mode_static(); //allocation failed
+  SwirlLoc* loc = reinterpret_cast<SwirlLoc*>(SEGENV.data);
+  // Initialize on first call.
+  if (SEGENV.call == 0) {
+    loc->x = randF(1.0, SEGMENT.virtualWidth());
+    loc->y = randF(1.0, SEGMENT.virtualHeight());
+    loc->xv = randF(0.0, 1.0); 
+    loc->yv =  randF(0.0, 1.0);
+  }
+
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 15;
+  if (SEGENV.step != counter) {
+    SEGENV.step = counter;
+    // Move the loc.
+    loc->x += loc->xv;
+    loc->y += loc->yv;
+  }
+  // Detect bounces.
+  if (loc->x < 0) {
+    loc->xv = -loc->xv;
+    loc->x = -loc->x;
+  }
+  if (loc->y < 0) {
+    loc->yv = -loc->yv;
+    loc->y = -loc->y;
+  }
+  
+  if (loc->x >= SEGMENT.virtualWidth()) {
+    loc->xv = -loc->xv;
+    loc->x = (SEGMENT.virtualWidth() << 1) - loc->x - 1;
+  }
+  if (loc->y >= SEGMENT.virtualHeight()) {
+    loc->yv = -loc->yv;
+    loc->y = (SEGMENT.virtualHeight() << 1) - loc->y - 1;
+  }
+  // This effect is hard coded for 20x20.
+  if (SEGMENT.virtualHeight() < 20 || SEGMENT.virtualWidth() < 20) return mode_static();
+  uint32_t angle = (strip.now * SEGMENT.speed) >> 10;
+  int cx = (int)(loc->x + 0.5f);
+  int cy = (int)(loc->y + 0.5f);
+  for (int x=0, i=0; x<20; x++) {
+    for (int y=0; y<20; y++, i++) {
+      uint16_t a = (angle_to(x, y, cx, cy) + angle) % 360;
+      // map from 0-359 to 0-255
+      a = a * 256 / 360;
+      uint32_t c = SEGMENT.color_from_palette(a, false, true, 3);
+      strip.setPixelColorXY(x, y, c);
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_WANDER_SWIRL[] PROGMEM = "Wandering Swirl@!;;!;2";
+
+struct Snowflake {
+  uint8_t x;
+  uint8_t y;
+  uint8_t speed;
+};
+
+#define SNOWFLAKES 20
+
+uint16_t mode_christmastree(void) {
+  if (!SEGENV.allocateData(sizeof(Snowflake) * SNOWFLAKES)) return mode_static(); //allocation failed
+  Snowflake* flakes = reinterpret_cast<Snowflake*>(SEGENV.data);
+  if (SEGENV.call == 0) {
+    for (int i=0; i < SNOWFLAKES; i++) {
+      flakes[i].x = random8(20);
+      flakes[i].y = random8(20);
+      flakes[i].speed = random8(2) + 1;
+    }
+  }
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 11;
+  strip.fill(bg());
+  // Draw the slow flakes.
+  for (int i=0; i < SNOWFLAKES; i++) {
+    if (flakes[i].speed == 1) {
+      strip.setPixelColorXY(flakes[i].x, flakes[i].y, 35, 35, 35);
+    }
+  }
+  // Draw the tree.
+  int start = 9, end = 10;
+  for (int y=1; y < 18; y++) {
+    for (int x = start; x < end; x++) {
+      strip.setPixelColorXY(x,y,fg());
+    }
+    if (!(y&1)) {
+      start--;
+      end++;
+    }
+  }
+  strip.setPixelColorXY(1, 16, fg());
+  strip.setPixelColorXY(17, 16, fg());
+  strip.setPixelColorXY(0, 17, fg());
+  strip.setPixelColorXY(18, 17, fg());
+  // Draw the trunk.
+  for (int y=18; y < 20; y++) {
+      strip.setPixelColorXY(8, y, 35, 5, 0);
+      strip.setPixelColorXY(9, y, 35, 5, 0);
+      strip.setPixelColorXY(10, y, 35, 5, 0);
+  }
+  // Draw the star
+  byte sbr = counter & 0xFF;
+  if (sbr < 128) {
+    sbr = sbr << 1;
+  } else {
+    sbr = (255 - sbr) << 1;
+  }
+  byte sbr2 = sbr >> 2;
+  strip.setPixelColorXY(9, 0, sbr2, sbr2, 0);
+  strip.setPixelColorXY(8, 1, sbr2, sbr2, 0);
+  strip.setPixelColorXY(10, 1, sbr2, sbr2, 0);
+  strip.setPixelColorXY(9, 1, sbr, sbr, 0);
+  strip.setPixelColorXY(9, 2, sbr2, sbr2, 0);
+
+  // Draw the lights.
+  for (int i=0; i < LIGHTCOUNT << 1; i+=2) {
+    int index = i * 9;
+    sbr = (counter + index) & 0xFF;
+    uint32_t c = SEGMENT.color_from_palette(sbr, false, true, 3);
+    strip.setPixelColorXY(treelights[i], treelights[i+1], c);
+  }
+  // Draw the fast flakes and move flakes as needed.
+  bool edge = false;
+  uint32_t scnt = counter >> 2;
+  if (SEGENV.step != scnt) {
+    edge = true;
+    SEGENV.step = scnt;
+  }
+  for (int i=0; i < SNOWFLAKES; i++) {
+    if (flakes[i].speed == 2) {
+      strip.setPixelColorXY(flakes[i].x, flakes[i].y, 255, 255, 255);
+    }
+    if (edge && (flakes[i].speed == 2 || (flakes[i].speed == 1 && (scnt & 1)))) {
+      flakes[i].y++;
+      if (flakes[i].y == 20) {
+        flakes[i].y = 0;
+        flakes[i].x = random8(20);
+        flakes[i].speed = random8(2) + 1;
+      }
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_CHRISTMAS_TREE[] PROGMEM = "Christmas Tree@!;!,!;!;2";
+
+uint16_t mode_dragon(void) {
+  const uint8_t *dptr = dragon;
+  for (int y=0; y < 20; y++) {
+    for(int x=0; x < 20; x++) {
+      uint8_t r = *(dptr++);
+      uint8_t g = *(dptr++);
+      uint8_t b = *(dptr++);
+      if (r == 0x00 && g == 0x00 && b == 0x00) {
+        r = R(bg());
+        g = G(bg());
+        b = B(bg());
+      }
+      strip.setPixelColorXY(x, y, r, g, b);
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_DRAGON[] PROGMEM = "Dragon@;!,!;;2";
+
+uint16_t mode_nathaniel(void) {
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 13;
+  uint32_t c = SEGMENT.color_from_palette(counter & 0xFF, false, true, 3);
+  strip.fill(c);
+  uint32_t toggle = (counter>>2) & 3;
+  
+  for (int y=0; y < 20; y++) {
+    for(int x=toggle; x < 20; x=x+4) {
+      strip.setPixelColorXY(x, y, fg());
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_NATHANIEL[] PROGMEM = "Nathaniel@!;!,!;!;2";
+
+uint16_t mode_bullseye(void) {
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 13;
+  int w=SEGMENT.virtualWidth(), h=SEGMENT.virtualHeight();
+  for (int x=0, y=0; x<w/2 && y<h/2; x++, y++) {
+    uint32_t c = SEGMENT.color_from_palette((counter + (x<<3)) & 0xFF, false, true, 3);
+    for (int x1 = x; x1<(w-x); x1++) {
+      strip.setPixelColorXY(x1, y, c);
+      strip.setPixelColorXY(x1, h-y-1, c);
+    }
+    for (int y1 =y; y1<(h-y); y1++) {
+      strip.setPixelColorXY(x, y1, c);
+      strip.setPixelColorXY(w-x-1, y1, c);
+    }
+  }
+  // strip.setPixelColorXY(x, y, c);
+  return FRAMETIME;
+}
+static const char _data_FX_BULLSEYE[] PROGMEM = "Bullseye@!;!,!;!;2";
+
+void setPixelSafe(int x, int y, uint32_t c) {
+  if (x >= 0 && y >=0) {
+    strip.setPixelColorXY(x, y, c);
+  }
+}
+
+void draw_heart(int x, int y, uint32_t c) {
+  setPixelSafe(x + 1, y, c);
+  setPixelSafe(x + 2, y, c);
+  setPixelSafe(x + 4, y, c);
+  setPixelSafe(x + 5, y, c);
+  for (int xi = x; xi < x + 7; xi++) {
+    setPixelSafe(xi, y + 1, c);
+  }
+  for (int yi = y + 2, i = 0; yi < y + 6; yi++, i++) {
+    for (int xi = x + i; xi < x + 7 - i; xi++) {
+      setPixelSafe(xi, yi, c);
+    }
+  }
+}
+
+uint16_t mode_2DBlackHole(void);
+
+struct  Heart {
+  int8_t x;
+  int8_t y;
+  uint8_t speed;
+  uint8_t color;
+};
+
+#define HEARTS 5
+
+uint16_t mode_heart(void) {
+  // Allocate memory for the heart data.
+  if (!SEGENV.allocateData(sizeof(Heart) * HEARTS))
+    return mode_static(); //allocation failed
+  // Clear the screen.
+  strip.fill(bg());
+  // Initialize the hearts on the first call.
+  Heart* hearts = reinterpret_cast<Heart*>(SEGENV.data);
+  if (SEGENV.call == 0) {
+    for (int i=0; i < HEARTS; i++) {
+      hearts[i].x = random8(26) - 6;
+      hearts[i].y = random8(25) - 5;
+      hearts[i].speed = random8(2) + 1;
+      hearts[i].color = random8();
+    }
+  }
+
+  // Create a counter.
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 12;
+  bool edge = false;
+  uint32_t scnt = counter >> 2;
+  if (SEGENV.step != scnt) {
+    edge = true;
+    SEGENV.step = scnt;
+  }
+
+  // Draw the hearts.
+  for (int i = 0; i < HEARTS; i++) {
+    draw_heart(hearts[i].x, hearts[i].y, SEGMENT.color_from_palette(hearts[i].color, false, true, 3));
+    if (edge) {
+      hearts[i].y += hearts[i].speed;
+      if (hearts[i].y >= 20) {
+        hearts[i].x = random8(26) - 6;
+        hearts[i].y = -5;
+        hearts[i].speed = random8(2) + 1;
+        hearts[i].color = random8();
+      }
+    }
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_HEART[] PROGMEM = "Heart@!;!,!;!;2";
+
+uint16_t mode_hearthole(void) {
+  draw_heart(7, 7, RGBW32(0,0,0,0));
+  mode_2DBlackHole();
+  draw_heart(7, 7, fg());
+  return FRAMETIME;
+}
+static const char _data_FX_HEART_HOLE[] PROGMEM = "Heart Hole@Fade rate,Outer Y freq.,Outer X freq.,Inner X freq.,Inner Y freq.,Solid;!;!;2;pal=11";
+
+// Set a few pixels on the screen to specific colors.
+uint16_t mode_steam1(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+
+  strip.setPixelColorXY(3,  3, RGBW32(255, 0, 0, 0));
+  strip.setPixelColorXY(10, 2, RGBW32(0, 255, 0, 0));
+  strip.setPixelColorXY(2, 10, RGBW32(0, 0, 255, 0));
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM1[] PROGMEM = "Steam1@!;!,!;!;2";
+
+// Set odd rows to the same foreground color.
+uint16_t mode_steam2(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+
+  for (int y=0; y < 20; y++) {
+    if ((y % 2) == 1) {
+      for (int x=0; x < 20; x++) {
+        strip.setPixelColorXY(x, y, fg());
+      }
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM2[] PROGMEM = "Steam2@!;!,!;!;2";
+
+// Map rows to the color palette
+uint16_t mode_steam3(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+
+  for (int y=0; y < 20; y++) {
+    uint16_t index = y * 255 / 19;
+    uint32_t c = SEGMENT.color_from_palette(index, false, true, 3);
+    for (int x=0; x < 20; x++) {
+      strip.setPixelColorXY(x, y, c);
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM3[] PROGMEM = "Steam3@!;!,!;!;2";
+
+// Map rows to the color palette but make them rotate through the palette over time.
+uint16_t mode_steam4(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 12;
+
+  for (int y=0; y < 20; y++) {
+    uint16_t index = ((y * 255 / 19) + counter) % 256;
+    uint32_t c = SEGMENT.color_from_palette(index, false, true, 3);
+    for (int x=0; x < 20; x++) {
+      strip.setPixelColorXY(x, y, c);
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM4[] PROGMEM = "Steam4@!;!,!;!;2";
+
+// Number of raindrops
+#define RAINDROPS 20
+
+// struct for steam5
+struct Drop {
+  uint8_t x;
+  uint8_t y;
+  uint8_t speed;
+  uint8_t color;
+};
+
+// Colored rain.
+uint16_t mode_steam5(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+  
+  // Allocate memory for the raindrop data.
+  if (!SEGMENT.allocateData(sizeof(Drop) * RAINDROPS))
+    return mode_static(); //allocation failed
+  Drop* drops = reinterpret_cast<Drop*>(SEGMENT.data);
+
+  // Initialize the raindrops on the first call.
+  if (SEGMENT.call == 0) {
+    for (int i=0; i < RAINDROPS; i++) {
+      drops[i].x = random8(20);  // 0-19
+      drops[i].y = random8(20);  // 0-19
+      drops[i].speed = random8(2) + 1;  // 1 or 2
+      drops[i].color = random8(); // 0 - 255
+    }
+  }
+
+  // Draw all the raindrops.
+  for (int i=0; i < RAINDROPS; i++) {
+    uint32_t c = SEGMENT.color_from_palette(drops[i].color, false, true, 3);
+    strip.setPixelColorXY(drops[i].x, drops[i].y, c);
+  }
+
+  // Setup a clock based on the speed and update drops only when it ticks over.
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 14;
+  bool tick = false;
+  if (SEGMENT.step != counter) {
+    tick = true;
+    SEGMENT.step = counter;
+  }
+  if (tick) {
+    // Update the positions of all the raindrops.
+    for (int i=0; i < RAINDROPS; i++) {
+      drops[i].y += drops[i].speed;
+      // Check if the drop went off the screen and reset if it did.
+      if (drops[i].y >= 20) {
+        drops[i].x = random8(20);  // 0-19
+        drops[i].y = 0;
+        drops[i].speed = random8(2) + 1;  // 1 or 2
+        drops[i].color = random8(); // 0 - 255
+      }
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM5[] PROGMEM = "Steam5@!;!,!;!;2";
 
 /*
  * Alternating pixels running function.
@@ -10565,6 +11091,20 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_BLENDS, &mode_blends, _data_FX_MODE_BLENDS);
   addEffect(FX_MODE_TV_SIMULATOR, &mode_tv_simulator, _data_FX_MODE_TV_SIMULATOR);
   addEffect(FX_MODE_DYNAMIC_SMOOTH, &mode_dynamic_smooth, _data_FX_MODE_DYNAMIC_SMOOTH);
+  addEffect(FX_MODE_DAD_BOUNCE, &mode_dadbounce, _data_FX_MODE_DAD_BOUNCE);
+  addEffect(FX_MODE_DAD_SWIRL, &mode_dadswirl, _data_FX_MODE_DAD_SWIRL);
+  addEffect(FX_MODE_CHRISTMASTREE, &mode_christmastree, _data_FX_MODE_CHRISTMAS_TREE);
+  addEffect(FX_MODE_DRAGON, &mode_dragon, _data_FX_DRAGON);
+  addEffect(FX_MODE_WANDER_SWIRL, &mode_wanderswirl, _data_FX_MODE_WANDER_SWIRL);
+  addEffect(FX_MODE_NATHANIEL, &mode_nathaniel, _data_FX_NATHANIEL);
+  addEffect(FX_MODE_BULLSEYE, &mode_bullseye, _data_FX_BULLSEYE);
+  addEffect(FX_MODE_HEART, &mode_heart, _data_FX_HEART);
+  addEffect(FX_MODE_HEARTHOLE, &mode_hearthole, _data_FX_HEART_HOLE);
+  addEffect(FX_MODE_STEAM1, &mode_steam1, _data_FX_STEAM1);
+  addEffect(FX_MODE_STEAM2, &mode_steam2, _data_FX_STEAM2);
+  addEffect(FX_MODE_STEAM3, &mode_steam3, _data_FX_STEAM3);
+  addEffect(FX_MODE_STEAM4, &mode_steam4, _data_FX_STEAM4);
+  addEffect(FX_MODE_STEAM5, &mode_steam5, _data_FX_STEAM5);
 
   // --- 1D audio effects ---
   addEffect(FX_MODE_PIXELS, &mode_pixels, _data_FX_MODE_PIXELS);
