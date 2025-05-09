@@ -897,10 +897,6 @@ uint16_t mode_steam1(void) {
   // Clear all the LEDS
   strip.fill(bg());
 
-  strip.setPixelColorXY(3,  3, RGBW32(255, 0, 0, 0));
-  strip.setPixelColorXY(10, 2, RGBW32(0, 255, 0, 0));
-  strip.setPixelColorXY(2, 10, RGBW32(0, 0, 255, 0));
-
   return FRAMETIME;
 }
 static const char _data_FX_STEAM1[] PROGMEM = "Steam1@!;!,!;!;2";
@@ -909,14 +905,6 @@ static const char _data_FX_STEAM1[] PROGMEM = "Steam1@!;!,!;!;2";
 uint16_t mode_steam2(void) {
   // Clear all the LEDS
   strip.fill(bg());
-
-  for (int y=0; y < 20; y++) {
-    if ((y % 2) == 1) {
-      for (int x=0; x < 20; x++) {
-        strip.setPixelColorXY(x, y, fg());
-      }
-    }
-  }
 
   return FRAMETIME;
 }
@@ -927,14 +915,6 @@ uint16_t mode_steam3(void) {
   // Clear all the LEDS
   strip.fill(bg());
 
-  for (int y=0; y < 20; y++) {
-    uint16_t index = y * 255 / 19;
-    uint32_t c = SEGMENT.color_from_palette(index, false, true, 3);
-    for (int x=0; x < 20; x++) {
-      strip.setPixelColorXY(x, y, c);
-    }
-  }
-
   return FRAMETIME;
 }
 static const char _data_FX_STEAM3[] PROGMEM = "Steam3@!;!,!;!;2";
@@ -944,151 +924,24 @@ uint16_t mode_steam4(void) {
   // Clear all the LEDS
   strip.fill(bg());
 
-  uint32_t counter = (strip.now * SEGMENT.speed) >> 12;
-
-  for (int y=0; y < 20; y++) {
-    uint16_t index = ((y * 255 / 19) + counter) % 256;
-    uint32_t c = SEGMENT.color_from_palette(index, false, true, 3);
-    for (int x=0; x < 20; x++) {
-      strip.setPixelColorXY(x, y, c);
-    }
-  }
-
   return FRAMETIME;
 }
 static const char _data_FX_STEAM4[] PROGMEM = "Steam4@!;!,!;!;2";
-
-// Number of raindrops
-#define RAINDROPS 20
-
-// struct for steam5
-struct Drop {
-  uint8_t x;
-  uint8_t y;
-  uint8_t speed;
-  uint8_t color;
-};
 
 // Colored rain.
 uint16_t mode_steam5(void) {
   // Clear all the LEDS
   strip.fill(bg());
   
-  // Allocate memory for the raindrop data.
-  if (!SEGMENT.allocateData(sizeof(Drop) * RAINDROPS))
-    return mode_static(); //allocation failed
-  Drop* drops = reinterpret_cast<Drop*>(SEGMENT.data);
-
-  // Initialize the raindrops on the first call.
-  if (SEGMENT.call == 0) {
-    for (int i=0; i < RAINDROPS; i++) {
-      drops[i].x = random8(20);  // 0-19
-      drops[i].y = random8(20);  // 0-19
-      drops[i].speed = random8(2) + 1;  // 1 or 2
-      drops[i].color = random8(); // 0 - 255
-    }
-  }
-
-  // Draw all the raindrops.
-  for (int i=0; i < RAINDROPS; i++) {
-    uint32_t c = SEGMENT.color_from_palette(drops[i].color, false, true, 3);
-    strip.setPixelColorXY(drops[i].x, drops[i].y, c);
-  }
-
-  // Setup a clock based on the speed and update drops only when it ticks over.
-  uint32_t counter = (strip.now * SEGMENT.speed) >> 14;
-  bool tick = false;
-  if (SEGMENT.step != counter) {
-    tick = true;
-    SEGMENT.step = counter;
-  }
-  if (tick) {
-    // Update the positions of all the raindrops.
-    for (int i=0; i < RAINDROPS; i++) {
-      drops[i].y += drops[i].speed;
-      // Check if the drop went off the screen and reset if it did.
-      if (drops[i].y >= 20) {
-        drops[i].x = random8(20);  // 0-19
-        drops[i].y = 0;
-        drops[i].speed = random8(2) + 1;  // 1 or 2
-        drops[i].color = random8(); // 0 - 255
-      }
-    }
-  }
-
   return FRAMETIME;
 }
 static const char _data_FX_STEAM5[] PROGMEM = "Steam5@!;!,!;!;2";
-
-// Number of bits
-#define BITS 80
-
-// struct for steam6
-struct Bit {
-  uint16_t dist;  // Distance from the center of the screen.
-  uint16_t angle; // Angle that the bit is moving away from the center at.
-  uint8_t speed;  // Speed that the bit is moving.
-  uint8_t color;  // Color index into the palette to draw this bit with.
-};
 
 // Colored bits from the center.
 uint16_t mode_steam6(void) {
   // Clear all the LEDS
   strip.fill(bg());
   
-  // Allocate memory for the bits data.
-  if (!SEGMENT.allocateData(sizeof(Bit) * BITS))
-    return mode_static(); //allocation failed
-  Bit* bits = reinterpret_cast<Bit*>(SEGMENT.data);
-
-  // Initialize the bits on the first call.
-  if (SEGMENT.call == 0) {
-    for (int i=0; i < BITS; i++) {
-      bits[i].dist = 0;
-      bits[i].angle = random16();
-      bits[i].speed = random8(10) + 1;  // 1 - 10
-      bits[i].color = random8(); // 0 - 255
-    }
-  }
-
-  // Draw all the bits.
-  int offscreen = 0;
-  for (int i=0; i < BITS; i++) {
-    int8_t x = (int8_t)((((int32_t)cos16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
-    int8_t y = (int8_t)((((int32_t)sin16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
-    uint32_t c = SEGMENT.color_from_palette(bits[i].color, false, true, 3);
-    // Check if the bit is on the screen.
-    if (x >=0 && x < 20 && y >=0 && y < 20) {
-      strip.setPixelColorXY(x, y, c);
-    } else {
-      // Remember this bit was off screen.
-      offscreen++;
-    }
-  }
-
-  // Setup a clock based on the speed and update bits only when it ticks over.
-  uint32_t counter = (strip.now * SEGMENT.speed) >> 14;
-  bool tick = false;
-  if (SEGMENT.step != counter) {
-    tick = true;
-    SEGMENT.step = counter;
-  }
-
-  // If all the bits are off the screen then reset all the bits.
-  if (offscreen >= BITS) {
-    for (int i=0; i < BITS; i++) {
-      bits[i].dist = 0;
-      bits[i].angle = random16();
-      bits[i].speed = random8(10) + 1;  // 1 - 10
-      bits[i].color = random8(); // 0 - 255
-    }
-  // Else if the clock ticked then move the bits outward.
-  } else if (tick) {
-    for (int i=0; i < BITS; i++) {
-      bits[i].dist += bits[i].speed;
-    }
-  }
-
   return FRAMETIME;
 }
 static const char _data_FX_STEAM6[] PROGMEM = "Steam6@!;!,!;!;2";
