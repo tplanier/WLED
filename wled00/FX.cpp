@@ -1054,8 +1054,8 @@ uint16_t mode_steam6(void) {
   // Draw all the bits.
   int offscreen = 0;
   for (int i=0; i < BITS; i++) {
-    int8_t x = (int8_t)((((int32_t)sin16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
-    int8_t y = (int8_t)((((int32_t)cos16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
+    int8_t x = (int8_t)((((int32_t)cos16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
+    int8_t y = (int8_t)((((int32_t)sin16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
     uint32_t c = SEGMENT.color_from_palette(bits[i].color, false, true, 3);
     // Check if the bit is on the screen.
     if (x >=0 && x < 20 && y >=0 && y < 20) {
