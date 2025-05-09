@@ -368,8 +368,9 @@ extern byte realtimeMode;           // used in getMappedPixelIndex()
 #define FX_MODE_STEAM3                 229
 #define FX_MODE_STEAM4                 230
 #define FX_MODE_STEAM5                 231
+#define FX_MODE_STEAM6                 232
 
-#define MODE_COUNT                     232
+#define MODE_COUNT                     233
 
 
 #define BLEND_STYLE_FADE            0x00  // universal

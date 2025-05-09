@@ -1020,6 +1020,72 @@ uint16_t mode_steam5(void) {
 }
 static const char _data_FX_STEAM5[] PROGMEM = "Steam5@!;!,!;!;2";
 
+// Number of bits
+#define BITS 80
+
+// struct for steam6
+struct Bit {
+  uint8_t dist;
+  uint16_t angle;
+  uint8_t speed;
+  uint8_t color;
+};
+
+// Colored bits from the center.
+uint16_t mode_steam6(void) {
+  // Clear all the LEDS
+  strip.fill(bg());
+  
+  // Allocate memory for the bits data.
+  if (!SEGMENT.allocateData(sizeof(Bit) * BITS))
+    return mode_static(); //allocation failed
+  Bit* bits = reinterpret_cast<Bit*>(SEGMENT.data);
+
+  // Initialize the bits on the first call.
+  if (SEGMENT.call == 0) {
+    for (int i=0; i < BITS; i++) {
+      bits[i].dist = 0;
+      bits[i].angle = random16();
+      bits[i].speed = random8(10) + 1;  // 1 - 10
+      bits[i].color = random8(); // 0 - 255
+    }
+  }
+  // Setup a clock based on the speed and update bits only when it ticks over.
+  uint32_t counter = (strip.now * SEGMENT.speed) >> 14;
+  bool tick = false;
+  if (SEGMENT.step != counter) {
+    tick = true;
+    SEGMENT.step = counter;
+  }
+
+  // Draw all the bits.
+  int offscreen = 0;
+  for (int i=0; i < BITS; i++) {
+    int8_t x = (int8_t)((((int32_t)sin16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
+    int8_t y = (int8_t)((((int32_t)cos16_t(bits[i].angle)) * bits[i].dist) / 0xFFFF + 10);
+    uint32_t c = SEGMENT.color_from_palette(bits[i].color, false, true, 3);
+    if (x >=0 && x < 20 && y >=0 && y < 20) {
+      strip.setPixelColorXY(x, y, c);
+    } else {
+      offscreen++;
+    }
+    if (tick) {
+      bits[i].dist += bits[i].speed;
+    }
+  }
+  if (offscreen >= BITS) {
+    for (int i=0; i < BITS; i++) {
+      bits[i].dist = 0;
+      bits[i].angle = random16();
+      bits[i].speed = random8(10) + 1;  // 1 - 10
+      bits[i].color = random8(); // 0 - 255
+    }
+  }
+
+  return FRAMETIME;
+}
+static const char _data_FX_STEAM6[] PROGMEM = "Steam6@!;!,!;!;2";
+
 /*
  * Alternating pixels running function.
  */
@@ -11105,6 +11171,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_STEAM3, &mode_steam3, _data_FX_STEAM3);
   addEffect(FX_MODE_STEAM4, &mode_steam4, _data_FX_STEAM4);
   addEffect(FX_MODE_STEAM5, &mode_steam5, _data_FX_STEAM5);
+  addEffect(FX_MODE_STEAM6, &mode_steam6, _data_FX_STEAM6);
 
   // --- 1D audio effects ---
   addEffect(FX_MODE_PIXELS, &mode_pixels, _data_FX_MODE_PIXELS);
